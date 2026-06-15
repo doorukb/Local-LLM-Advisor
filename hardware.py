@@ -1,10 +1,3 @@
-"""Hardware detection for Local-LLM-Advisor.
-
-Returns a fixed-shape dictionary consumed by all downstream components.
-CPU, RAM, NVIDIA, AMD, and macOS (Apple/integrated) GPU detection are implemented.
-OS detection is stubbed.
-"""
-
 from __future__ import annotations
 import json
 import platform
