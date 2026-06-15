@@ -14,7 +14,7 @@ No hardcoded model lists. No stale recommendations. No free-text input surface f
 
 ## How It Works
 
-**Step 1 — Hardware detection**
+**Step 1 - Hardware detection**
 
 On launch, the script reads your system automatically:
 
@@ -25,7 +25,7 @@ On launch, the script reads your system automatically:
 
 You never type any of this. It is collected programmatically and is not editable.
 
-**Step 2 — Fixed input selections**
+**Step 2 - Fixed input selections**
 
 A GUI window opens with a small set of dropdown menus and radio buttons:
 
@@ -36,7 +36,7 @@ A GUI window opens with a small set of dropdown menus and radio buttons:
 
 These are the only inputs a user provides. None of them are free-text fields. None of them enter the LLM prompt uncontrolled.
 
-**Step 3 — Live model data fetch**
+**Step 3 - Live model data fetch**
 
 Before calling Gemini, the script fetches:
 
@@ -45,11 +45,11 @@ Before calling Gemini, the script fetches:
 
 This data is injected into the prompt as context. The LLM reasons over what is actually available right now, not what was in its training data at cutoff. This keeps recommendations current as new models are released without any changes to the codebase.
 
-**Step 4 — Gemini 1.5 Flash inference**
+**Step 4 - Gemini 1.5 Flash inference**
 
 A fully hardcoded, structured prompt is assembled from the detected hardware, the user's selections, and the fetched model data. The prompt is sent to Gemini 1.5 Flash using the user's own API key. The prompt instructs the model to return a formatted report and nothing else. There is no conversational loop, no follow-up turns, no free-text channel.
 
-**Step 5 — Report display**
+**Step 5 - Report display**
 
 The report appears in a scrollable text box in the same window. It can be saved to a `.txt` file. When the user closes the window, the program exits completely. No background processes, no cached data, no logs written anywhere by default.
 
@@ -89,23 +89,25 @@ The report structure branches on the engine the user selected.
 **Linux / macOS**
 
 \```bash
-curl -fsSL https://raw.githubusercontent.com/dorukbilge/local-llm-advisor/main/launch.sh | bash
+curl -fsSL https://raw.githubusercontent.com/doorukb/Local-LLM-Advisor/main/launch.sh | bash
 \```
 
 **Windows (PowerShell)**
 
 \```powershell
-irm https://raw.githubusercontent.com/dorukbilge/local-llm-advisor/main/launch.ps1 | iex
+irm https://raw.githubusercontent.com/doorukb/Local-LLM-Advisor/main/launch.ps1 | iex
 \```
 
-That is the entire setup. The script checks for Python, creates an isolated virtual environment, installs dependencies into it, and launches the advisor. On first run you will be prompted to enter your Gemini API key once. The window opens, you make your selections, you get your report, you close the window. The virtual environment is self-contained in a temporary directory and does not affect your global Python installation.
+That is the entire setup. The script checks for Python, creates an isolated virtual environment, installs dependencies into it, and launches the advisor. On first run you will be prompted to enter your Gemini API key once. You can enter any valid Google Gemini API Key (Google AI Studio key) and the script will automatically route the requests to the free Gemini 1.5 Flash model, and it will cost absolutely nothing.
+
+The window opens, you make your selections, you get your report, you close the window. The virtual environment is self-contained in a temporary directory and does not affect your global Python installation.
 
 ### Manual install (fallback)
 
 For users who prefer not to pipe a remote script to a shell:
 
 \```
-git clone https://github.com/dorukbilge/local-llm-advisor
+git clone https://github.com/doorukb/Local-LLM-Advisor
 cd local-llm-advisor
 pip install google-generativeai psutil GPUtil requests customtkinter
 python advisor.py
