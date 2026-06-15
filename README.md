@@ -1,5 +1,7 @@
 # Local-LLM-Advisor
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A simple, zero-installation terminal script that analyzes your hardware and recommends the best local AI models you can reliably run. You run it, make a few selections, get a detailed report, close the window. No servers, no accounts beyond a free Gemini API key, no trace left behind.
 
 ---
@@ -88,15 +90,15 @@ The report structure branches on the engine the user selected.
 
 **Linux / macOS**
 
-\```bash
+```
 curl -fsSL https://raw.githubusercontent.com/doorukb/Local-LLM-Advisor/main/launch.sh | bash
-\```
+```
 
 **Windows (PowerShell)**
 
-\```powershell
+```
 irm https://raw.githubusercontent.com/doorukb/Local-LLM-Advisor/main/launch.ps1 | iex
-\```
+```
 
 That is the entire setup. The script checks for Python, creates an isolated virtual environment, installs dependencies into it, and launches the advisor. On first run you will be prompted to enter your Gemini API key once. You can enter any valid Google Gemini API Key (Google AI Studio key) and the script will automatically route the requests to the free Gemini 2.5 Flash model, and it will cost absolutely nothing.
 
@@ -108,12 +110,12 @@ To test a branch before it is merged to `main`, set `LLM_ADVISOR_BRANCH` (for ex
 
 For users who prefer not to pipe a remote script to a shell:
 
-\```
+```
 git clone https://github.com/doorukb/Local-LLM-Advisor
 cd Local-LLM-Advisor
 pip install -r requirements.txt
 python advisor.py
-\```
+```
 
 ### First run and API key
 
@@ -130,23 +132,23 @@ To remove the stored key and leave no trace:
 
 **Manual or local clone:**
 
-\```
+```
 python advisor.py --reset
-\```
+```
 
 **Remote bootstrap — Linux / macOS:**
 
-\```bash
+```bash
 curl -fsSL https://raw.githubusercontent.com/doorukb/Local-LLM-Advisor/main/launch.sh | bash -s -- --reset
-\```
+```
 
 **Remote bootstrap — Windows (PowerShell):**
 
-\```powershell
+```powershell
 $launch = Join-Path $env:TEMP "llm-advisor-launch.ps1"
 irm https://raw.githubusercontent.com/doorukb/Local-LLM-Advisor/main/launch.ps1 -OutFile $launch
 & $launch --reset
-\```
+```
 
 `--reset` deletes the stored API key and, when launched via the bootstrap scripts, removes the temporary virtual environment. It exits without opening the GUI.
 
