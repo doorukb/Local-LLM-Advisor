@@ -1,7 +1,8 @@
 from __future__ import annotations
 from collections.abc import Callable
 from fetch import fetch_all
-from gemini import GeminiApiKeyNotFoundError, generate_report
+from config import GeminiApiKeyNotFoundError
+from gemini import generate_report
 from hardware import detect_hardware
 from prompt import HardwareSnapshot, UserSelections, build_prompt
 

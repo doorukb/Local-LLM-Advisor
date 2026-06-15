@@ -5,6 +5,7 @@ from collections.abc import Callable
 from tkinter import font as tkfont
 import customtkinter as ctk
 from advisor import STATUS_FETCHING, STATUS_GENERATING
+from config import has_api_key, save_api_key
 
 AnalyzeCallback = Callable[[dict[str, str], Callable[[str], None] | None], str]
 INFERENCE_ENGINES = ("Ollama", "llama.cpp", "LM Studio")
@@ -121,6 +122,44 @@ def _show_loading_ui(report_text: ctk.CTkTextbox, message: str, progress_bar: ct
 def _hide_loading_ui(progress_bar: ctk.CTkProgressBar) -> None:
     progress_bar.grid_remove()
 
+# first-run modal to collect and persist the Gemini API key
+def _prompt_api_key(parent: ctk.CTk) -> None:
+    dialog = ctk.CTkToplevel(parent)
+    dialog.title("Gemini API Key")
+    dialog.geometry("480x220")
+    dialog.resizable(False, False)
+    dialog.transient(parent)
+    dialog.grab_set()
+
+    label_font = ctk.CTkFont(size=13)
+    dialog.grid_columnconfigure(0, weight=1)
+
+    ctk.CTkLabel(dialog, text="Enter your free Gemini API key from Google AI Studio.", font=label_font, wraplength=440).grid(row=0, column=0, padx=24, pady=(24, 8), sticky="w")
+    key_entry = ctk.CTkEntry(dialog, show="*", font=label_font, width=420)
+    key_entry.grid(row=1, column=0, padx=24, pady=(0, 8), sticky="ew")
+    error_label = ctk.CTkLabel(dialog, text="API key cannot be empty.", font=label_font, text_color="#f87171")
+    error_label.grid(row=2, column=0, padx=24, pady=(0, 8), sticky="w")
+    error_label.grid_remove()
+
+    button_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+    button_frame.grid(row=3, column=0, padx=24, pady=(0, 24), sticky="e")
+
+    def _close_dialog() -> None:
+        dialog.grab_release()
+        dialog.destroy()
+
+    def _on_save() -> None:
+        if not key_entry.get().strip():
+            error_label.grid()
+            return
+        save_api_key(key_entry.get())
+        _close_dialog()
+
+    ctk.CTkButton(button_frame, text="Cancel", width=BUTTON_WIDTH, font=label_font, command=_close_dialog).grid(row=0, column=0, padx=(0, 12))
+    ctk.CTkButton(button_frame, text="Save", width=BUTTON_WIDTH, font=label_font, command=_on_save).grid(row=0, column=1)
+    key_entry.focus_set()
+    dialog.wait_window(dialog)
+
 # opens save dialog and writes textbox content to disk
 def _save_report(report_text: ctk.CTkTextbox, parent: ctk.CTk) -> None:
     path = tk.filedialog.asksaveasfilename(parent=parent, title="Save report", defaultextension=".txt", filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
@@ -139,6 +178,9 @@ def run_gui(analyze_callback: AnalyzeCallback | None = None) -> None:
     window.title("Local LLM Advisor")
     window.geometry(f"{WINDOW_SIZE[0]}x{WINDOW_SIZE[1]}")
     window.minsize(WINDOW_MIN_SIZE[0], WINDOW_MIN_SIZE[1])
+
+    if not has_api_key():
+        _prompt_api_key(window)
 
     label_font = ctk.CTkFont(size=13)
     section_font = ctk.CTkFont(size=14, weight="bold")

@@ -1,19 +1,14 @@
 from __future__ import annotations
-import json
-import os
 import socket
-from pathlib import Path
 import google.generativeai as genai
 import requests
 from google.api_core import exceptions as google_api_exceptions
 from google.generativeai.types import generation_types
+from config import load_api_key
 
 GEMINI_MODEL = "gemini-1.5-flash"
 GEMINI_TEMPERATURE = 0.2
 GEMINI_REQUEST_TIMEOUT = 120
-GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
-_PROJECT_DIR = Path(__file__).resolve().parent
-DEFAULT_CONFIG_PATH = _PROJECT_DIR / "config.json"
 
 ERROR_INVALID_API_KEY = (
     "Gemini API error: Invalid API key. "
@@ -31,32 +26,6 @@ ERROR_UNEXPECTED_RESPONSE = (
     "Gemini API error: Unexpected response from Gemini. "
     "Try again; if it persists, retry with different selections."
 )
-
-
-# raised when no Gemini API key is available from env or config.json
-class GeminiApiKeyNotFoundError(Exception):
-    pass
-
-# load the Gemini API key from env or config.json
-def load_api_key(config_path: Path = DEFAULT_CONFIG_PATH) -> str:
-    env_key = os.environ.get(GEMINI_API_KEY_ENV)
-    if env_key and env_key.strip():
-        return env_key.strip()
-
-    if config_path.is_file():
-        raw = config_path.read_text(encoding="utf-8").strip()
-        if raw:
-            try:
-                data = json.loads(raw)
-            except json.JSONDecodeError:
-                data = None
-
-            if isinstance(data, dict):
-                api_key = data.get("api_key")
-                if api_key and str(api_key).strip():
-                    return str(api_key).strip()
-
-    raise GeminiApiKeyNotFoundError("No Gemini API key found. Set GEMINI_API_KEY or add api_key to config.json.")
 
 def _exception_message(exc: BaseException) -> str:
     return str(exc).lower()
