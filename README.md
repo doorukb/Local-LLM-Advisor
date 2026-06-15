@@ -136,13 +136,13 @@ To remove the stored key and leave no trace:
 python advisor.py --reset
 ```
 
-**Remote bootstrap — Linux / macOS:**
+**Remote bootstrap - Linux / macOS:**
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/doorukb/Local-LLM-Advisor/main/launch.sh | bash -s -- --reset
 ```
 
-**Remote bootstrap — Windows (PowerShell):**
+**Remote bootstrap - Windows (PowerShell):**
 
 ```powershell
 $launch = Join-Path $env:TEMP "llm-advisor-launch.ps1"
@@ -156,7 +156,7 @@ irm https://raw.githubusercontent.com/doorukb/Local-LLM-Advisor/main/launch.ps1 
 
 ## Security and Privacy
 
-Your API key is stored on your machine only — in the project `config.json` for a local clone, or in the user profile paths listed above for remote bootstrap. It is sent directly from your machine to the Gemini API over HTTPS. It is never sent to any intermediate server, never logged, and never included in any telemetry. The project has no telemetry.
+Your API key is stored on your machine only - in the project `config.json` for a local clone, or in the user profile paths listed above for remote bootstrap. It is sent directly from your machine to the Gemini API over HTTPS. It is never sent to any intermediate server, never logged, and never included in any telemetry. The project has no telemetry.
 
 Your hardware data is collected locally, assembled into a prompt on your machine, and sent to Gemini as part of the API request. It is not stored anywhere after the window closes.
 
@@ -168,7 +168,7 @@ This project is open source. You can read every line of code that runs. There ar
 
 This tool is designed specifically for **Gemini 3.1 Flash-Lite** via the Google Generative AI Python SDK. Other Gemini models or other providers are not supported in this version.
 
-On the free tier, Gemini 3.1 Flash-Lite is typically limited to roughly 30 requests per minute, 1,500 requests per day, and 1 million tokens per minute. Limits are set per Google Cloud project (not per API key) and can vary by region and account status — check your active limits in [Google AI Studio](https://aistudio.google.com). Each advisor run uses one request, so personal use stays well within the free tier.
+On the free tier, Gemini 3.1 Flash-Lite is typically limited to roughly 30 requests per minute, 1,500 requests per day, and 1 million tokens per minute. Limits are set per Google Cloud project (not per API key) and can vary by region and account status - check your active limits in [Google AI Studio](https://aistudio.google.com). Each advisor run uses one request, so personal use stays well within the free tier.
 
 Get a key at: https://aistudio.google.com
 
