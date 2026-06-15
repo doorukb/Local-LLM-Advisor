@@ -1,8 +1,11 @@
 from __future__ import annotations
 import html
+import logging
 import re
 from typing import TypedDict
 import requests
+
+logger = logging.getLogger(__name__)
 
 # ollama library url and parameters
 
@@ -141,6 +144,10 @@ def fetch_ollama_models() -> list[OllamaModelEntry]:
                 "description": card["description"],
             }
         )
+
+    if not models:
+        _ollama_fetch_available = False
+        logger.warning("Ollama library fetched but no models parsed; page markup may have changed. Falling back to training knowledge.")
 
     return models
 

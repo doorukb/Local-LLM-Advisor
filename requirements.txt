@@ -1,6 +1,6 @@
-google-generativeai
-psutil
-py-cpuinfo
-GPUtil
-requests
-customtkinter
+google-generativeai==0.8.6
+psutil==7.2.2
+py-cpuinfo==9.0.0
+GPUtil==1.4.0
+requests==2.34.2
+customtkinter==5.2.2

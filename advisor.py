@@ -1,26 +1,21 @@
 from __future__ import annotations
 import sys
 from collections.abc import Callable
+from constants import STATUS_FETCHING, STATUS_GENERATING
 from fetch import fetch_all
-from config import GeminiApiKeyNotFoundError, reset_config, schedule_bootstrap_venv_removal
+from config import reset_config, schedule_bootstrap_venv_removal
 from gemini import generate_report
 from hardware import detect_hardware
 from prompt import HardwareSnapshot, UserSelections, build_prompt
 
-STATUS_FETCHING = "Fetching current model data..."
-STATUS_GENERATING = "Generating report..."
-
 def run_pipeline(hardware: HardwareSnapshot, selections: UserSelections, on_status: Callable[[str], None] | None = None) -> str:
-    try:
-        if on_status is not None:
-            on_status(STATUS_FETCHING)
-        fetch_result = fetch_all()
-        system_prompt, user_prompt = build_prompt(hardware, selections, fetch_result)
-        if on_status is not None:
-            on_status(STATUS_GENERATING)
-        return generate_report(system_prompt, user_prompt)
-    except GeminiApiKeyNotFoundError as exc:
-        return str(exc)
+    if on_status is not None:
+        on_status(STATUS_FETCHING)
+    fetch_result = fetch_all()
+    system_prompt, user_prompt = build_prompt(hardware, selections, fetch_result)
+    if on_status is not None:
+        on_status(STATUS_GENERATING)
+    return generate_report(system_prompt, user_prompt)
 
 # reset and exit the config and virtual environment when you want to start fresh
 def reset_and_exit() -> None:

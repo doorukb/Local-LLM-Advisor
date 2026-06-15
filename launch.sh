@@ -96,4 +96,5 @@ if [[ -n "$BOOTSTRAP_REMOTE" ]]; then
   export LLM_ADVISOR_CONFIG_PATH="$CONFIG_DIR/config.json"
 fi
 
+# WORK_DIR (the git clone) is removed by trap cleanup_work_dir EXIT; VENV_DIR is intentionally not trapped so --reset can remove it later
 exec "$VENV_PYTHON" "$ADVISOR_FILE" "$@"
