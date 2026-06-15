@@ -49,6 +49,28 @@ _LLAMA_CPP_PERFORMANCE_GUIDANCE = {
     "Balanced": "Balance -ngl, quant, and -c for stable throughput and quality",
 }
 
+LM_STUDIO_ENGINE = "LM Studio"  # must match gui.INFERENCE_ENGINES[2]
+
+_LM_STUDIO_USE_CASE_GUIDANCE = {
+    "General chat": "Temperature ~0.7, Top P ~0.9; friendly system prompt in Chat settings",
+    "Coding assistant": "Temperature ~0.2, Top P ~0.95; system prompt for precise, runnable code",
+    "Document Q&A": "Temperature ~0.3, Top P ~0.9; system prompt for grounded answers",
+    "Creative writing": "Temperature ~0.85, Top P ~0.95; system prompt for vivid prose",
+    "Summarization": "Temperature ~0.3, Top P ~0.85; system prompt for concise summaries",
+}
+
+_LM_STUDIO_CONTEXT_GUIDANCE = {
+    "Short (2K-4K)": "Context Length 2048-4096; minimizes KV-cache VRAM in LM Studio",
+    "Medium (8K-16K)": "Context Length 8192-16384; balance context vs VRAM",
+    "Long (32K+)": "Context Length 32768+ only when VRAM/RAM supports it; reduce if load fails",
+}
+
+_LM_STUDIO_PERFORMANCE_GUIDANCE = {
+    "Speed (tokens/sec)": "Maximize GPU offload layers when VRAM allows; prefer Q4 quant; lower context if needed",
+    "Quality (best output at hardware limits)": "Prefer Q5/Q8 within VRAM; max sensible GPU layer offload",
+    "Balanced": "Balance GPU layers, quant, and context for stable throughput and quality",
+}
+
 class CpuInfo(TypedDict):
     model: str
     cores: int
@@ -263,6 +285,61 @@ def format_llama_cpp_output_instructions(selections: UserSelections) -> str | No
         ]
     )
 
+def format_lm_studio_output_instructions(selections: UserSelections) -> str | None:
+    if selections["inference_engine"] != LM_STUDIO_ENGINE:
+        return None
+
+    use_case = selections["primary_use_case"]
+    context_pref = selections["context_length"]
+    performance = selections["performance_priority"]
+    use_case_guidance = _LM_STUDIO_USE_CASE_GUIDANCE.get(
+        use_case,
+        "Temperature ~0.7, Top P ~0.9; system prompt suited to the selected use case",
+    )
+    context_guidance = _LM_STUDIO_CONTEXT_GUIDANCE.get(
+        context_pref,
+        "Set Context Length appropriate for the user's context preference and hardware",
+    )
+    performance_guidance = _LM_STUDIO_PERFORMANCE_GUIDANCE.get(
+        performance,
+        "Balance GPU layers, quant, and context for stable throughput and quality",
+    )
+
+    return "\n".join(
+        [
+            "## LM Studio Output Requirements",
+            "",
+            "The user selected LM Studio as their inference engine. For every model you recommend, "
+            "include a dedicated subsection titled with the model name containing all items below. "
+            "Use GGUF repo names and quant labels from the Hugging Face catalog data when available.",
+            "",
+            "### Per recommended model",
+            "",
+            "1. Model search terms",
+            "   - Provide exact search strings for LM Studio's Discover / model search panel "
+            "(e.g. Hugging Face repo id, model family name, parameter size, quantization such as Q4_K_M).",
+            "   - List 2-4 alternative search terms if the primary name may not appear.",
+            "",
+            f"2. Loader settings (use case: {use_case}; performance: {performance})",
+            "   - Recommend which GGUF quantization file to select when multiple are available.",
+            "   - Specify loader options: GPU layers to offload, CPU thread count, batch size, and "
+            "whether to enable flash attention / mmap when appropriate for this hardware.",
+            f"   - Sampling guidance for this use case: {use_case_guidance}",
+            f"   - Performance tuning guidance: {performance_guidance}",
+            "   - Reference the user's detected CPU, RAM, and GPU/VRAM from the hardware section.",
+            "",
+            f"3. Context and GPU offload configuration (preference: {context_pref})",
+            f"   - {context_guidance}",
+            "   - Explain how to set Context Length in LM Studio's load or chat settings.",
+            "   - Recommend GPU layer offload (or full CPU mode if no discrete GPU) for the user's VRAM.",
+            "   - Describe the tradeoff between more GPU layers (faster, more VRAM) vs fewer layers "
+            "(slower, fits larger models or longer context).",
+            "",
+            "Do not recommend GGUF quants the hardware cannot load. If only a lower quant, fewer GPU "
+            "layers, or shorter context fits, state the tradeoff explicitly.",
+        ]
+    )
+
 def _format_model_list(title: str, models: list[ModelEntry]) -> str:
     lines = [title + ":"]
     for model in models:
@@ -319,3 +396,20 @@ if __name__ == "__main__":
     if llama_cpp_instructions:
         print(llama_cpp_instructions)
     assert format_llama_cpp_output_instructions(selections) is None
+
+    lm_studio_selections: UserSelections = {
+        **selections,
+        "inference_engine": "LM Studio",
+    }
+    assert format_lm_studio_output_instructions(lm_studio_selections) is not None
+    assert format_lm_studio_output_instructions(selections) is None
+    assert format_lm_studio_output_instructions(llama_cpp_selections) is None
+
+    print("--- LM Studio engine demo ---")
+    print(format_hardware_context(hardware))
+    print()
+    print(format_selections_context(lm_studio_selections))
+    print()
+    lm_studio_instructions = format_lm_studio_output_instructions(lm_studio_selections)
+    if lm_studio_instructions:
+        print(lm_studio_instructions)
