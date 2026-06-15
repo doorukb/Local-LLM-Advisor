@@ -71,27 +71,36 @@ _LM_STUDIO_PERFORMANCE_GUIDANCE = {
     "Balanced": "Balance GPU layers, quant, and context for stable throughput and quality",
 }
 
+MAX_CATALOG_MODELS = 50
+MAX_HF_CATALOG_MODELS = 60
+
 SYSTEM_PROMPT = """You are Local LLM Advisor, a hardware-aware expert that recommends local inference models and concrete setup steps. Reason only over the hardware, user preferences, and model catalog provided in the user message.
 
 Your task is to produce exactly one structured report. Use live catalog data when present. Fall back to training knowledge only when the user message states that a catalog was unavailable.
 
 ## Required report format
 
-Output markdown using exactly this structure:
+Your response must begin with this exact heading as the first line:
 
 # Local LLM Advisor Report
 
+Then continue with:
+
 ## Executive Summary
-Write 2-4 sentences covering hardware constraints, the top recommendation, and the key tradeoff.
+Write 2-4 sentences covering hardware constraints, the top recommendation, and the key tradeoff. Cite detected RAM and VRAM numbers from the user message.
 
 ## Recommended Models
 Rank models best to worst fit for this hardware and preferences. Include at least one recommendation if any model can run. Recommend 3-5 models when possible; recommend fewer if hardware is very limited. Never invent models not supported by the catalog or your training knowledge.
 
+Every recommendation must respect detected memory limits. Do not recommend a model whose weights plus KV-cache at the chosen context size would exceed available VRAM or RAM. State the memory math you used (e.g. weight footprint + context overhead vs available GB).
+
+If no discrete GPU was detected, prioritize models at or below 8B parameters for interactive use unless the user chose Quality (best output at hardware limits) and total RAM clearly supports a larger model. Explain any exception explicitly.
+
 ### 1. Model name (quantization)
-- **Estimated speed:** tokens per second on this hardware
-- **Memory:** VRAM and/or RAM estimate
-- **Why this model:** hardware-grounded rationale tied to user preferences
-- **Engine setup:** all fields required by the Output Requirements section in the user message
+- **Estimated speed:** a numeric range in tokens per second on this hardware (e.g. 8-15 tok/s). Do not use vague terms like "fast" or "moderate" without numbers.
+- **Memory:** VRAM and/or RAM estimate in GB with brief justification
+- **Why this model:** hardware-grounded rationale tied to user preferences; cite CPU threads, RAM, and VRAM from the user message
+- **Engine setup:** all fields required by the Output Requirements section in the user message. Quote detected hardware values when tuning flags or settings.
 
 ### 2. (repeat for each additional recommendation)
 
@@ -101,15 +110,17 @@ List models considered from the catalog but poor fits. One brief bullet per mode
 ## Hardware Notes
 Provide 1-3 bullets summarizing binding constraints from the detected hardware (VRAM ceiling, CPU-only operation, context limits).
 
+Match recommended context window size to the user's stated context length preference. If you must recommend a lower context, state the downgrade and why.
+
 For each model under **Engine setup**, include every item listed in the ## Ollama Output Requirements, ## llama.cpp Output Requirements, or ## LM Studio Output Requirements section of the user message (whichever is present).
 
 ## Output constraints
 
-- Output only the report. No preamble, postamble, greetings, or sign-off.
+- Output only the report. The first line must be # Local LLM Advisor Report. No preamble, postamble, greetings, or sign-off.
 - No conversational language or follow-up questions.
 - No meta disclaimers. Do not mention being an AI, knowledge cutoffs, inability to browse, or uncertainty about your own capabilities.
 - No content outside the headings defined above.
-- Markdown report only. No JSON, XML, or other formats.
+- Markdown report only. Use flat bullets, not tables. No HTML. At most one fenced code block per recommended model.
 - Do not request more information from the user.
 - If data is missing, state facts inside the report sections. Do not refuse or apologize."""
 
@@ -268,6 +279,8 @@ def format_ollama_output_instructions(selections: UserSelections) -> str | None:
             "`OLLAMA_NUM_CTX` environment variable, or `ollama run` options.",
             "   - Tie the recommendation to the user's detected VRAM/RAM; reduce num_ctx if "
             "hardware cannot support the preference.",
+            "   - In Engine setup, cite the detected CPU thread count, total RAM, and VRAM values "
+            "from the hardware section when recommending parameters.",
             "",
             "Do not recommend models the hardware cannot run at the suggested context size. "
             "If a model fits only at a lower context, state the tradeoff explicitly.",
@@ -324,6 +337,8 @@ def format_llama_cpp_output_instructions(selections: UserSelections) -> str | No
             "(slower, fits larger models/context).",
             "   - If no discrete GPU was detected, recommend CPU-only settings and realistic "
             "throughput expectations.",
+            "   - In Engine setup, cite the detected CPU thread count, total RAM, and VRAM values "
+            "from the hardware section when explaining each flag.",
             "",
             "Do not recommend GGUF quants the hardware cannot load. If only a lower quant or smaller -c "
             "fits, state the tradeoff explicitly.",
@@ -379,6 +394,8 @@ def format_lm_studio_output_instructions(selections: UserSelections) -> str | No
             "   - Recommend GPU layer offload (or full CPU mode if no discrete GPU) for the user's VRAM.",
             "   - Describe the tradeoff between more GPU layers (faster, more VRAM) vs fewer layers "
             "(slower, fits larger models or longer context).",
+            "   - In loader and offload guidance, cite the detected CPU thread count, total RAM, "
+            "and VRAM values from the hardware section.",
             "",
             "Do not recommend GGUF quants the hardware cannot load. If only a lower quant, fewer GPU "
             "layers, or shorter context fits, state the tradeoff explicitly.",
@@ -408,7 +425,65 @@ def format_live_model_context(fetch_result: FetchResult) -> str:
 
     return "\n\n".join(sections)
 
+def _catalog_fetch_result_for_engine(fetch_result: FetchResult, engine: str) -> FetchResult:
+    ollama = list(fetch_result["ollama"])
+    huggingface = list(fetch_result["huggingface"])
+
+    if engine == OLLAMA_ENGINE:
+        huggingface = []
+    elif engine in (LLAMA_CPP_ENGINE, LM_STUDIO_ENGINE):
+        ollama = []
+
+    return {
+        "ollama": ollama,
+        "huggingface": huggingface,
+        "ollama_available": fetch_result["ollama_available"],
+        "huggingface_available": fetch_result["huggingface_available"],
+    }
+
+def _trim_fetch_result(fetch_result: FetchResult) -> FetchResult:
+    return {
+        "ollama": fetch_result["ollama"][:MAX_CATALOG_MODELS],
+        "huggingface": fetch_result["huggingface"][:MAX_HF_CATALOG_MODELS],
+        "ollama_available": fetch_result["ollama_available"],
+        "huggingface_available": fetch_result["huggingface_available"],
+    }
+
+def _format_engine_output_instructions(selections: UserSelections) -> str | None:
+    for formatter in (
+        format_ollama_output_instructions,
+        format_llama_cpp_output_instructions,
+        format_lm_studio_output_instructions,
+    ):
+        block = formatter(selections)
+        if block is not None:
+            return block
+    return None
+
+def _build_user_prompt(hardware: HardwareSnapshot, selections: UserSelections, fetch_result: FetchResult) -> str:
+    engine = selections["inference_engine"]
+    catalog = _trim_fetch_result(_catalog_fetch_result_for_engine(fetch_result, engine))
+
+    sections = [
+        "Analyze the following and produce the report.",
+        format_hardware_context(hardware),
+        format_selections_context(selections),
+        "## Live Model Catalog",
+        format_live_model_context(catalog),
+    ]
+
+    engine_instructions = _format_engine_output_instructions(selections)
+    if engine_instructions:
+        sections.append(engine_instructions)
+
+    return "\n\n".join(sections)
+
+def build_prompt(hardware: HardwareSnapshot, selections: UserSelections, fetch_result: FetchResult) -> tuple[str, str]:
+    return get_system_prompt(), _build_user_prompt(hardware, selections, fetch_result)
+
 if __name__ == "__main__":
+    import os
+
     from hardware import detect_hardware
 
     hardware = detect_hardware()
@@ -418,6 +493,15 @@ if __name__ == "__main__":
         "context_length": "Medium (8K-16K)",
         "performance_priority": "Balanced",
     }
+
+    if os.environ.get("LIVE_GEMINI") == "1":
+        from fetch import fetch_all
+        from gemini import generate_report
+
+        system, user = build_prompt(hardware, selections, fetch_all())
+        print(generate_report(system, user))
+        raise SystemExit(0)
+
     print(format_hardware_context(hardware))
     print()
     print(format_selections_context(selections))
@@ -468,3 +552,14 @@ if __name__ == "__main__":
     assert "conversational" in system_prompt.lower()
     assert "disclaimer" in system_prompt.lower()
     print(system_prompt)
+
+    from fetch import fetch_all
+
+    fetch_result = fetch_all()
+    system, user = build_prompt(hardware, selections, fetch_result)
+    assert system == get_system_prompt()
+    assert "## Detected Hardware" in user
+    assert "## User Preferences" in user
+    assert "## Ollama Output Requirements" in user
+    assert len(user) < 50000
+    print("--- build_prompt offline checks passed ---")
