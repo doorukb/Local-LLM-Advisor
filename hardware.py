@@ -1,14 +1,16 @@
 from __future__ import annotations
+import json
 import platform
 import subprocess
 import psutil
 
 # hardware decetion for Local-LLM-Advisor
 # returns a fixed shape dictionary consumed by all downstream components
-# GPU and OS decetion are stubbed until later phases
+# CPU, RAM, NVIDIA, and AMD GPU detection are implemented and OS detection stubbed.
 
 _GB = 1024**3
 _GPU_NOT_DETECTED = {"model": "not_detected", "vram_gb": 0.0, "vendor": "unknown"}
+_VRAM_TOTAL_KEYS = frozenset({"memory_total", "total memory (b)", "vram total memory (b)"})
 
 def _detect_cpu() -> dict[str, int | str]:
     model = platform.processor().strip()
@@ -86,14 +88,73 @@ def _detect_gpu_via_nvidia_smi() -> list[dict[str, float | str]]:
         gpus.append({"model": name, "vram_gb": vram_gb, "vendor": "nvidia"})
     return gpus
 
-def _detect_gpu() -> list[dict[str, float | str]]:
+def _detect_nvidia_gpus() -> list[dict[str, float | str]]:
     gpus = _detect_gpu_via_gputil()
     if gpus:
         return gpus
-    gpus = _detect_gpu_via_nvidia_smi()
+    return _detect_gpu_via_nvidia_smi()
+
+def _extract_vram_total_bytes(node: object) -> float | None:
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if isinstance(key, str) and key.lower() in _VRAM_TOTAL_KEYS:
+                try:
+                    total = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if total > 0:
+                    return total
+            found = _extract_vram_total_bytes(value)
+            if found is not None:
+                return found
+    return None
+
+def _detect_gpu_via_rocm_smi() -> list[dict[str, float | str]]:
+    try:
+        result = subprocess.run(
+            ["rocm-smi", "--showmeminfo", "vram", "--json"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        return []
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return []
+
+    if not isinstance(data, dict):
+        return []
+
+    gpus: list[dict[str, float | str]] = []
+    for device_id, device_data in data.items():
+        if not isinstance(device_data, dict):
+            continue
+        vram_bytes = _extract_vram_total_bytes(device_data)
+        if vram_bytes is None:
+            continue
+        gpus.append({
+            "model": device_id,
+            "vram_gb": round(vram_bytes / _GB, 2),
+            "vendor": "amd",
+        })
+    return gpus
+
+def _detect_gpu() -> list[dict[str, float | str]]:
+    gpus = _detect_nvidia_gpus()
+    if gpus:
+        return gpus
+    gpus = _detect_gpu_via_rocm_smi()
     if gpus:
         return gpus
     return [_GPU_NOT_DETECTED.copy()]
+
 
 def detect_hardware() -> dict[str, object]:
     return {
@@ -104,6 +165,4 @@ def detect_hardware() -> dict[str, object]:
     }
 
 if __name__ == "__main__":
-    import json
-
     print(json.dumps(detect_hardware(), indent=2))
