@@ -1,7 +1,12 @@
 from __future__ import annotations
+import threading
 import tkinter as tk
+from collections.abc import Callable
+from tkinter import font as tkfont
 import customtkinter as ctk
+from advisor import STATUS_FETCHING, STATUS_GENERATING
 
+AnalyzeCallback = Callable[[dict[str, str], Callable[[str], None] | None], str]
 INFERENCE_ENGINES = ("Ollama", "llama.cpp", "LM Studio")
 PRIMARY_USE_CASES = (
     "General chat",
@@ -26,6 +31,15 @@ REPORT_PLACEHOLDER = (
 )
 
 REPORT_FONT: tuple[str, int] = ("Courier New", 13)
+
+_CANDIDATE_MONO_FONTS = (
+    "Courier New",
+    "Consolas",
+    "Menlo",
+    "DejaVu Sans Mono",
+    "Liberation Mono",
+    "Courier",
+)
 
 WINDOW_SIZE = (820, 720)
 WINDOW_MIN_SIZE = (700, 620)
@@ -56,16 +70,6 @@ def get_selections(
         "performance_priority": performance_priority_var.get(),
     }
 
-# analyze the selections and print the report
-def on_analyze(
-    engine_combo: ctk.CTkComboBox,
-    use_case_combo: ctk.CTkComboBox,
-    context_length_var: tk.StringVar,
-    performance_priority_var: tk.StringVar,
-) -> None:
-    selections = get_selections(engine_combo, use_case_combo, context_length_var, performance_priority_var)
-    print(selections)
-
 def _add_labeled_combobox(parent: ctk.CTkFrame, row: int, label_text: str, values: tuple[str, ...], label_font: ctk.CTkFont) -> ctk.CTkComboBox:
     ctk.CTkLabel(parent, text=label_text, font=label_font, anchor="e").grid(row=row, column=0, sticky="e", padx=LABEL_PAD, pady=ROW_PAD_Y)
 
@@ -82,13 +86,19 @@ def _add_radio_group(parent: ctk.CTkFrame, row: int, label_text: str, options: t
     for col, option in enumerate(options):
         ctk.CTkRadioButton(group_frame, text=option, variable=variable, value=option, font=label_font).grid(row=0, column=col, sticky="w", padx=(0, 20))
 
-def _create_report_textbox(parent: ctk.CTkFrame, height: int = REPORT_TEXTBOX_HEIGHT) -> ctk.CTkTextbox:
-    report_text = ctk.CTkTextbox(parent, font=REPORT_FONT, height=height, wrap="word", activate_scrollbars=True)
+def _resolve_report_font(root: tk.Misc, size: int = 13) -> tuple[str, int]:
+    families = set(tkfont.families(root))
+    for family in _CANDIDATE_MONO_FONTS:
+        if family in families:
+            return (family, size)
+    return ("TkFixedFont", size)
+
+def _create_report_textbox(parent: ctk.CTkFrame, font: tuple[str, int], height: int = REPORT_TEXTBOX_HEIGHT) -> ctk.CTkTextbox:
+    report_text = ctk.CTkTextbox(parent, font=font, height=height, wrap="word", activate_scrollbars=True)
     report_text.insert("1.0", REPORT_PLACEHOLDER)
     report_text.configure(state="disabled")
     return report_text
 
-# Phase 7 calls this to populate the report
 def _set_report_content(report_text: ctk.CTkTextbox, content: str, save_button: ctk.CTkButton | None = None) -> None:
     report_text.configure(state="normal")
     report_text.delete("1.0", "end")
@@ -96,6 +106,20 @@ def _set_report_content(report_text: ctk.CTkTextbox, content: str, save_button: 
     report_text.configure(state="disabled")
     if save_button is not None:
         save_button.configure(state="normal")
+
+def _set_loading_content(report_text: ctk.CTkTextbox, message: str) -> None:
+    report_text.configure(state="normal")
+    report_text.delete("1.0", "end")
+    report_text.insert("1.0", message)
+    report_text.configure(state="disabled")
+
+def _show_loading_ui(report_text: ctk.CTkTextbox, message: str, progress_bar: ctk.CTkProgressBar) -> None:
+    _set_loading_content(report_text, message)
+    progress_bar.set(0.1)
+    progress_bar.grid()
+
+def _hide_loading_ui(progress_bar: ctk.CTkProgressBar) -> None:
+    progress_bar.grid_remove()
 
 # opens save dialog and writes textbox content to disk
 def _save_report(report_text: ctk.CTkTextbox, parent: ctk.CTk) -> None:
@@ -107,7 +131,7 @@ def _save_report(report_text: ctk.CTkTextbox, parent: ctk.CTk) -> None:
         f.write(content)
 
 # open the main window and block until the user closes it; Analyze button and report area
-def run_gui() -> None:
+def run_gui(analyze_callback: AnalyzeCallback | None = None) -> None:
     ctk.set_appearance_mode("dark")
     ctk.set_default_color_theme("blue")
 
@@ -119,18 +143,21 @@ def run_gui() -> None:
     label_font = ctk.CTkFont(size=13)
     section_font = ctk.CTkFont(size=14, weight="bold")
 
+    # add the window
     window.grid_columnconfigure(0, weight=1)
     window.grid_rowconfigure(0, weight=0)
     window.grid_rowconfigure(1, weight=1)
 
+    # add the input frame
     input_frame = ctk.CTkFrame(window, fg_color="transparent")
     input_frame.grid(row=0, column=0, sticky="ew", padx=OUTER_PAD_X, pady=INPUT_PAD_Y)
     input_frame.grid_columnconfigure(0, minsize=LABEL_COL_MINSIZE)
     input_frame.grid_columnconfigure(1, weight=1)
 
+    # add the dropdown menus and radio buttons
     engine_combo = _add_labeled_combobox(input_frame, row=0, label_text="Inference engine", values=INFERENCE_ENGINES, label_font=label_font)
     use_case_combo = _add_labeled_combobox(input_frame, row=1, label_text="Primary use case", values=PRIMARY_USE_CASES, label_font=label_font)
-
+    # add the context length radio buttons
     context_length_var = tk.StringVar(value=CONTEXT_LENGTH_OPTIONS[0])
     performance_priority_var = tk.StringVar(value=PERFORMANCE_PRIORITY_OPTIONS[0])
 
@@ -155,24 +182,30 @@ def run_gui() -> None:
         text="Analyze",
         width=BUTTON_WIDTH,
         font=label_font,
-        command=lambda: on_analyze(engine_combo, use_case_combo, context_length_var, performance_priority_var),
     )
     analyze_button.grid(row=4, column=1, sticky="w", pady=(16, 0))
 
     report_frame = ctk.CTkFrame(window, fg_color="transparent")
     report_frame.grid(row=1, column=0, sticky="nsew", padx=OUTER_PAD_X, pady=REPORT_PAD_Y)
     report_frame.grid_columnconfigure(0, weight=1)
-    report_frame.grid_rowconfigure(1, weight=1)
+    report_frame.grid_rowconfigure(2, weight=1)
 
+    # add the header frame
     header_frame = ctk.CTkFrame(report_frame, fg_color="transparent")
     header_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
     header_frame.grid_columnconfigure(0, weight=1)
 
     ctk.CTkLabel(header_frame, text="Report", font=section_font).grid(row=0, column=0, sticky="w")
 
-    report_text = _create_report_textbox(report_frame)
-    report_text.grid(row=1, column=0, sticky="nsew")
+    # add the progress bar
+    progress_bar = ctk.CTkProgressBar(report_frame, height=8)
+    progress_bar.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+    progress_bar.grid_remove()
 
+    # add the report textbox
+    report_text = _create_report_textbox(report_frame, _resolve_report_font(window))
+    report_text.grid(row=2, column=0, sticky="nsew")
+    # add the save button
     save_button = ctk.CTkButton(
         header_frame,
         text="Save report",
@@ -183,6 +216,67 @@ def run_gui() -> None:
     )
     save_button.grid(row=0, column=1, sticky="e")
 
+    # add the analyze running flag
+    analyze_running = False
+    pulse_after_id: str | None = None
+    pulse_direction = 1
+
+    def _pulse_progress(step: float = 0.1) -> None:
+        nonlocal pulse_after_id, pulse_direction
+        if not analyze_running:
+            return
+        progress_bar.set(step)
+        if step >= 0.9:
+            pulse_direction = -1
+        elif step <= 0.1:
+            pulse_direction = 1
+        pulse_after_id = window.after(50, lambda: _pulse_progress(step + pulse_direction * 0.08))
+
+    def _stop_pulse() -> None:
+        nonlocal pulse_after_id
+        if pulse_after_id is not None:
+            window.after_cancel(pulse_after_id)
+            pulse_after_id = None
+
+    def _finish_analyze(report: str) -> None:
+        nonlocal analyze_running
+        analyze_running = False
+        _stop_pulse()
+        _hide_loading_ui(progress_bar)
+        analyze_button.configure(state="normal")
+        _set_report_content(report_text, report, save_button)
+
+    # handle the analyze button
+    def _handle_analyze() -> None:
+        nonlocal analyze_running
+        selections = get_selections(engine_combo, use_case_combo, context_length_var, performance_priority_var)
+        if analyze_callback is None:
+            print(selections)
+            return
+        if analyze_running:
+            return
+
+        analyze_running = True
+        analyze_button.configure(state="disabled")
+        save_button.configure(state="disabled")
+        _show_loading_ui(report_text, STATUS_FETCHING, progress_bar)
+        _pulse_progress()
+
+        # start the worker thread
+        def worker() -> None:
+            def status(msg: str) -> None:
+                window.after(0, lambda m=msg: _set_loading_content(report_text, m))
+
+            try:
+                report = analyze_callback(selections, status)
+            except Exception as exc:
+                report = str(exc)
+
+            window.after(0, lambda r=report: _finish_analyze(r))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    analyze_button.configure(command=_handle_analyze)
     window.mainloop()
 
 if __name__ == "__main__":
