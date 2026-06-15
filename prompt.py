@@ -73,6 +73,7 @@ _LM_STUDIO_PERFORMANCE_GUIDANCE = {
 
 MAX_CATALOG_MODELS = 50
 MAX_HF_CATALOG_MODELS = 60
+# _catalog_fetch_result_for_engine clears the non-selected source before trim, so only one cap applies per run
 
 SYSTEM_PROMPT = """You are Local LLM Advisor, a hardware-aware expert that recommends local inference models and concrete setup steps. Reason only over the hardware, user preferences, and model catalog provided in the user message.
 

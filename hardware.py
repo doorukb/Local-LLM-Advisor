@@ -194,18 +194,13 @@ def _normalize_profiler_vendor(vendor: str, model: str) -> str:
         return "nvidia"
     return "unknown"
 
-def _build_profiler_gpu_entry(
-    chipset_model: str, # the gpu model name
-    vendor_raw: str, # the gpu vendor name
-    vram_total_text: str, # the total vram size in text format
-    vram_dynamic_text: str, # the dynamic vram size in text format
-) -> dict[str, float | str]:
+def _build_profiler_gpu_entry(chipset_model: str, vendor_raw: str, vram_total_text: str, vram_dynamic_text: str, total_ram_gb: float) -> dict[str, float | str]:
 
     # if the gpu is an apple silicon gpu, return the gpu model, vram size, and vendor
     if _is_apple_silicon_gpu(chipset_model):
         return {
             "model": f"{chipset_model} (unified memory)",
-            "vram_gb": round(_detect_ram()["total_gb"] * 0.75, 2),
+            "vram_gb": round(total_ram_gb * 0.75, 2),
             "vendor": "apple",
         }
 
@@ -217,7 +212,7 @@ def _build_profiler_gpu_entry(
     elif vram_dynamic_text.strip():
         vram_gb = _parse_memory_size_to_gb(vram_dynamic_text)
     if vram_gb is None:
-        vram_gb = _detect_ram()["total_gb"]
+        vram_gb = total_ram_gb
 
     if has_dedicated_vram:
         model = chipset_model
@@ -232,7 +227,7 @@ def _build_profiler_gpu_entry(
     }
 
 # detect the gpu via system profiler
-def _detect_gpu_via_system_profiler() -> list[dict[str, float | str]]:
+def _detect_gpu_via_system_profiler(total_ram_gb: float) -> list[dict[str, float | str]]:
     result = _run_subprocess(["system_profiler", "SPDisplaysDataType"], timeout=15)
     
     if result is None or result.returncode != 0 or not result.stdout.strip():
@@ -253,6 +248,7 @@ def _detect_gpu_via_system_profiler() -> list[dict[str, float | str]]:
                     vendor_raw,
                     vram_total_text,
                     vram_dynamic_text,
+                    total_ram_gb,
                 )
             )
         chipset_model = ""
@@ -290,12 +286,12 @@ def _should_skip_win32_gpu(name: str) -> bool:
     lowered = name.lower()
     return any(pattern in lowered for pattern in _WIN32_SKIP_GPU_PATTERNS)
 
-def _build_wmic_gpu_entry(name: str, adapter_ram_bytes: int) -> dict[str, float | str]:
+def _build_wmic_gpu_entry(name: str, adapter_ram_bytes: int, total_ram_gb: float) -> dict[str, float | str]:
     vendor = _normalize_profiler_vendor("", name)
     if adapter_ram_bytes < _MIN_DEDICATED_VRAM_BYTES:
         return {
             "model": f"{name} (VRAM shared with system RAM)",
-            "vram_gb": _detect_ram()["total_gb"],
+            "vram_gb": total_ram_gb,
             "vendor": vendor,
         }
 
@@ -306,7 +302,7 @@ def _build_wmic_gpu_entry(name: str, adapter_ram_bytes: int) -> dict[str, float 
     }
 
 # detect the gpu via wmic
-def _detect_gpu_via_wmic() -> list[dict[str, float | str]]:
+def _detect_gpu_via_wmic(total_ram_gb: float) -> list[dict[str, float | str]]:
     if platform.system() != "Windows":
         return []
 
@@ -332,11 +328,11 @@ def _detect_gpu_via_wmic() -> list[dict[str, float | str]]:
         except ValueError:
             adapter_ram_bytes = 0
 
-        gpus.append(_build_wmic_gpu_entry(name, adapter_ram_bytes))
+        gpus.append(_build_wmic_gpu_entry(name, adapter_ram_bytes, total_ram_gb))
 
     return gpus
 
-def _detect_gpu() -> list[dict[str, float | str]]:
+def _detect_gpu(total_ram_gb: float) -> list[dict[str, float | str]]:
     gpus = _detect_nvidia_gpus()
     if gpus:
         return gpus
@@ -344,11 +340,11 @@ def _detect_gpu() -> list[dict[str, float | str]]:
     if gpus:
         return gpus
     if platform.system() == "Windows":
-        gpus = _detect_gpu_via_wmic()
+        gpus = _detect_gpu_via_wmic(total_ram_gb)
         if gpus:
             return gpus
     if platform.system() == "Darwin":
-        gpus = _detect_gpu_via_system_profiler()
+        gpus = _detect_gpu_via_system_profiler(total_ram_gb)
         if gpus:
             return gpus
     return [_GPU_NOT_DETECTED.copy()]
@@ -356,10 +352,11 @@ def _detect_gpu() -> list[dict[str, float | str]]:
 # entry point for the hardware detection to return a fixed shape dictionary consumed by all downstream components
 # kind of like a factory function
 def detect_hardware() -> dict[str, object]:
+    ram = _detect_ram()
     return {
         "cpu": _detect_cpu(),
-        "ram": _detect_ram(),
-        "gpu": _detect_gpu(),
+        "ram": ram,
+        "gpu": _detect_gpu(ram["total_gb"]),
         "os": _detect_os(),
     }
 

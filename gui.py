@@ -2,11 +2,11 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 from collections.abc import Callable
-from tkinter import filedialog
+from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 import customtkinter as ctk
-from advisor import STATUS_FETCHING, STATUS_GENERATING
-from config import has_api_key, save_api_key
+from constants import STATUS_FETCHING, STATUS_GENERATING
+from config import GeminiApiKeyNotFoundError, has_api_key, save_api_key
 
 AnalyzeCallback = Callable[[dict[str, str], Callable[[str], None] | None], str]
 INFERENCE_ENGINES = ("Ollama", "llama.cpp", "LM Studio")
@@ -158,6 +158,7 @@ def _prompt_api_key(parent: ctk.CTk) -> None:
 
     ctk.CTkButton(button_frame, text="Cancel", width=BUTTON_WIDTH, font=label_font, command=_close_dialog).grid(row=0, column=0, padx=(0, 12))
     ctk.CTkButton(button_frame, text="Save", width=BUTTON_WIDTH, font=label_font, command=_on_save).grid(row=0, column=1)
+    dialog.protocol("WM_DELETE_WINDOW", _close_dialog)
     key_entry.focus_set()
     dialog.wait_window(dialog)
 
@@ -289,6 +290,15 @@ def run_gui(analyze_callback: AnalyzeCallback | None = None) -> None:
         analyze_button.configure(state="normal")
         _set_report_content(report_text, report, save_button)
 
+    def _handle_missing_key() -> None:
+        nonlocal analyze_running
+        analyze_running = False
+        _stop_pulse()
+        _hide_loading_ui(progress_bar)
+        analyze_button.configure(state="normal")
+        _set_loading_content(report_text, REPORT_PLACEHOLDER)
+        messagebox.showerror("Gemini API key required", "No Gemini API key found. Set GEMINI_API_KEY or add api_key to config.json.", parent=window)
+
     # handle the analyze button
     def _handle_analyze() -> None:
         nonlocal analyze_running
@@ -312,6 +322,9 @@ def run_gui(analyze_callback: AnalyzeCallback | None = None) -> None:
 
             try:
                 report = analyze_callback(selections, status)
+            except GeminiApiKeyNotFoundError:
+                window.after(0, _handle_missing_key)
+                return
             except Exception as exc:
                 report = str(exc)
 
