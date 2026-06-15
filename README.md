@@ -102,32 +102,59 @@ That is the entire setup. The script checks for Python, creates an isolated virt
 
 The window opens, you make your selections, you get your report, you close the window. The virtual environment is self-contained in a temporary directory and does not affect your global Python installation.
 
+To test a branch before it is merged to `main`, set `LLM_ADVISOR_BRANCH` (for example `config-and-reset`) before running the curl or irm command.
+
 ### Manual install (fallback)
 
 For users who prefer not to pipe a remote script to a shell:
 
 \```
 git clone https://github.com/doorukb/Local-LLM-Advisor
-cd local-llm-advisor
-pip install google-generativeai psutil GPUtil requests customtkinter
+cd Local-LLM-Advisor
+pip install -r requirements.txt
 python advisor.py
 \```
 
 ### First run and API key
 
-On first run, the script prompts for your Gemini API key and saves it to `config.json` in the project directory. It is not read again until you reset it. The key is sent only to the Gemini API directly from your machine.
+On first run, the script prompts for your Gemini API key and saves it for later runs. The key is sent only to the Gemini API directly from your machine.
+
+**Where the key is stored:**
+
+- **Manual install or local clone** (`./launch.ps1` / `./launch.sh` from a git checkout): `config.json` in the project directory
+- **Remote bootstrap** (`curl | bash` or `irm | iex`): a persistent user profile path so the key survives cleanup of the temporary clone
+  - Windows: `%APPDATA%\Local-LLM-Advisor\config.json`
+  - Linux / macOS: `~/.config/local-llm-advisor/config.json`
 
 To remove the stored key and leave no trace:
+
+**Manual or local clone:**
 
 \```
 python advisor.py --reset
 \```
 
+**Remote bootstrap — Linux / macOS:**
+
+\```bash
+curl -fsSL https://raw.githubusercontent.com/doorukb/Local-LLM-Advisor/main/launch.sh | bash -s -- --reset
+\```
+
+**Remote bootstrap — Windows (PowerShell):**
+
+\```powershell
+$launch = Join-Path $env:TEMP "llm-advisor-launch.ps1"
+irm https://raw.githubusercontent.com/doorukb/Local-LLM-Advisor/main/launch.ps1 -OutFile $launch
+& $launch --reset
+\```
+
+`--reset` deletes the stored API key and, when launched via the bootstrap scripts, removes the temporary virtual environment. It exits without opening the GUI.
+
 ---
 
 ## Security and Privacy
 
-Your API key is stored only in `config.json` in the project directory on your own machine. It is sent directly from your machine to the Gemini API over HTTPS. It is never sent to any intermediate server, never logged, and never included in any telemetry. The project has no telemetry.
+Your API key is stored on your machine only — in the project `config.json` for a local clone, or in the user profile paths listed above for remote bootstrap. It is sent directly from your machine to the Gemini API over HTTPS. It is never sent to any intermediate server, never logged, and never included in any telemetry. The project has no telemetry.
 
 Your hardware data is collected locally, assembled into a prompt on your machine, and sent to Gemini as part of the API request. It is not stored anywhere after the window closes.
 

@@ -6,6 +6,7 @@ DEFAULT_BRANCH="main"
 PYTHON_DOWNLOAD_URL="https://www.python.org/downloads/"
 
 WORK_DIR=""
+BOOTSTRAP_REMOTE=""
 
 die() {
   echo "Error: $*" >&2
@@ -24,6 +25,7 @@ resolve_script_dir() {
   if [[ -n "$source_path" && -f "$source_path" ]]; then
     cd "$(dirname "$source_path")"
     SCRIPT_DIR="$(pwd)"
+    BOOTSTRAP_REMOTE=""
     return 0
   fi
 
@@ -40,6 +42,7 @@ resolve_script_dir() {
   fi
 
   SCRIPT_DIR="$WORK_DIR"
+  BOOTSTRAP_REMOTE=1
 }
 
 find_python() {
@@ -74,7 +77,7 @@ ADVISOR_FILE="$SCRIPT_DIR/advisor.py"
 
 find_python
 
-VENV_DIR="$(mktemp -d)" || die "Failed to create a temporary virtual environment directory."
+VENV_DIR="$(mktemp -d "${TMPDIR:-/tmp}/llm-advisor-venv.XXXXXX")" || die "Failed to create a temporary virtual environment directory."
 if ! "$PYTHON" -m venv "$VENV_DIR"; then
   die "Failed to create virtual environment. On Debian/Ubuntu, install the python3-venv package and try again."
 fi
@@ -82,6 +85,15 @@ fi
 VENV_PYTHON="$VENV_DIR/bin/python"
 if ! "$VENV_PYTHON" -m pip install -r "$REQUIREMENTS_FILE"; then
   die "Failed to install dependencies from $REQUIREMENTS_FILE"
+fi
+
+# LLM_ADVISOR_VENV_DIR is read by advisor.py --reset to remove this bootstrap venv
+export LLM_ADVISOR_VENV_DIR="$VENV_DIR"
+
+if [[ -n "$BOOTSTRAP_REMOTE" ]]; then
+  CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/local-llm-advisor"
+  mkdir -p "$CONFIG_DIR"
+  export LLM_ADVISOR_CONFIG_PATH="$CONFIG_DIR/config.json"
 fi
 
 exec "$VENV_PYTHON" "$ADVISOR_FILE" "$@"
