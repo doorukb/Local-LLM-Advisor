@@ -127,7 +127,14 @@ try {
         Die "Failed to install dependencies from $RequirementsFile"
     }
 
+    # LLM_ADVISOR_VENV_DIR is read by advisor.py --reset to remove this bootstrap venv
     $env:LLM_ADVISOR_VENV_DIR = $VenvDir
+
+    if ([string]::IsNullOrEmpty($PSScriptRoot)) {
+        $configDir = Join-Path $env:APPDATA 'Local-LLM-Advisor'
+        New-Item -ItemType Directory -Path $configDir -Force | Out-Null
+        $env:LLM_ADVISOR_CONFIG_PATH = Join-Path $configDir 'config.json'
+    }
 
     & $VenvPython $AdvisorFile @args
     exit $LASTEXITCODE
