@@ -13,6 +13,35 @@ _GB = 1024**3
 _APPLE_SILICON_RE = re.compile(r"Apple M\d", re.IGNORECASE)
 _GPU_NOT_DETECTED = {"model": "not_detected", "vram_gb": 0.0, "vendor": "unknown"}
 _VRAM_TOTAL_KEYS = frozenset({"memory_total", "total memory (b)", "vram total memory (b)"})
+_WIN32_SKIP_GPU_PATTERNS = (
+    "microsoft basic display",
+    "remote display",
+    "virtual display",
+    "meta virtual monitor",
+)
+_MIN_DEDICATED_VRAM_BYTES = 256 * 1024 * 1024
+
+def _run_subprocess(cmd: list[str], timeout: int) -> subprocess.CompletedProcess[str] | None:
+    kwargs: dict[str, object] = {
+        "capture_output": True,
+        "text": True,
+        "timeout": timeout,
+        "check": False,
+    }
+    if platform.system() == "Windows":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+    try:
+        return subprocess.run(cmd, **kwargs)
+    except (FileNotFoundError, OSError, subprocess.SubprocessError):
+        return None
+
+def _detect_os() -> dict[str, str]:
+    return {
+        "name": platform.system(),
+        "version": platform.version(),
+        "arch": platform.machine(),
+    }
 
 def _detect_cpu() -> dict[str, int | str]:
     model = platform.processor().strip()
@@ -59,22 +88,8 @@ def _detect_gpu_via_gputil() -> list[dict[str, float | str]]:
         return []
 
 def _detect_gpu_via_nvidia_smi() -> list[dict[str, float | str]]:
-    try:
-        result = subprocess.run(
-            [
-                "nvidia-smi",
-                "--query-gpu=name,memory.total",
-                "--format=csv,noheader,nounits",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except (FileNotFoundError, OSError, subprocess.SubprocessError):
-        return []
-
-    if result.returncode != 0 or not result.stdout.strip():
+    result = _run_subprocess(["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader,nounits"], timeout=10)
+    if result is None or result.returncode != 0 or not result.stdout.strip():
         return []
 
     gpus: list[dict[str, float | str]] = []
@@ -112,18 +127,9 @@ def _extract_vram_total_bytes(node: object) -> float | None:
     return None
 
 def _detect_gpu_via_rocm_smi() -> list[dict[str, float | str]]:
-    try:
-        result = subprocess.run(
-            ["rocm-smi", "--showmeminfo", "vram", "--json"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=False,
-        )
-    except (FileNotFoundError, OSError, subprocess.SubprocessError):
-        return []
-
-    if result.returncode != 0 or not result.stdout.strip():
+    result = _run_subprocess(["rocm-smi", "--showmeminfo", "vram", "--json"], timeout=10)
+    
+    if result is None or result.returncode != 0 or not result.stdout.strip():
         return []
 
     try:
@@ -141,13 +147,11 @@ def _detect_gpu_via_rocm_smi() -> list[dict[str, float | str]]:
         vram_bytes = _extract_vram_total_bytes(device_data)
         if vram_bytes is None:
             continue
-        gpus.append(
-            {
+        gpus.append({
                 "model": device_id,
                 "vram_gb": round(vram_bytes / _GB, 2),
-                "vendor": "amd",
-            }
-        )
+            "vendor": "amd",
+        })
     return gpus
 
 def _parse_memory_size_to_gb(text: str) -> float | None:
@@ -190,7 +194,6 @@ def _normalize_profiler_vendor(vendor: str, model: str) -> str:
         return "nvidia"
     return "unknown"
 
-
 def _build_profiler_gpu_entry(
     chipset_model: str, # the gpu model name
     vendor_raw: str, # the gpu vendor name
@@ -198,6 +201,7 @@ def _build_profiler_gpu_entry(
     vram_dynamic_text: str, # the dynamic vram size in text format
 ) -> dict[str, float | str]:
 
+    # if the gpu is an apple silicon gpu, return the gpu model, vram size, and vendor
     if _is_apple_silicon_gpu(chipset_model):
         return {
             "model": f"{chipset_model} (unified memory)",
@@ -205,6 +209,7 @@ def _build_profiler_gpu_entry(
             "vendor": "apple",
         }
 
+    # if the gpu has dedicated vram, use the total vram size
     has_dedicated_vram = bool(vram_total_text.strip())
     vram_gb: float | None = None
     if has_dedicated_vram:
@@ -219,25 +224,18 @@ def _build_profiler_gpu_entry(
     else:
         model = f"{chipset_model} (VRAM shared with system RAM)"
 
+    # return the gpu model, vram size, and vendor
     return {
         "model": model,
         "vram_gb": vram_gb,
         "vendor": _normalize_profiler_vendor(vendor_raw, chipset_model),
     }
 
+# detect the gpu via system profiler
 def _detect_gpu_via_system_profiler() -> list[dict[str, float | str]]:
-    try:
-        result = subprocess.run(
-            ["system_profiler", "SPDisplaysDataType"],
-            capture_output=True,
-            text=True,
-            timeout=15,
-            check=False,
-        )
-    except (FileNotFoundError, OSError, subprocess.SubprocessError):
-        return []
-
-    if result.returncode != 0 or not result.stdout.strip():
+    result = _run_subprocess(["system_profiler", "SPDisplaysDataType"], timeout=15)
+    
+    if result is None or result.returncode != 0 or not result.stdout.strip():
         return []
 
     gpus: list[dict[str, float | str]] = []
@@ -286,6 +284,58 @@ def _detect_gpu_via_system_profiler() -> list[dict[str, float | str]]:
     flush()
     return gpus
 
+# check if the gpu should be skipped
+# this is for windows only which is becaue the gpu is not detected by system profiler
+def _should_skip_win32_gpu(name: str) -> bool:
+    lowered = name.lower()
+    return any(pattern in lowered for pattern in _WIN32_SKIP_GPU_PATTERNS)
+
+def _build_wmic_gpu_entry(name: str, adapter_ram_bytes: int) -> dict[str, float | str]:
+    vendor = _normalize_profiler_vendor("", name)
+    if adapter_ram_bytes < _MIN_DEDICATED_VRAM_BYTES:
+        return {
+            "model": f"{name} (VRAM shared with system RAM)",
+            "vram_gb": _detect_ram()["total_gb"],
+            "vendor": vendor,
+        }
+
+    return {
+        "model": name,
+        "vram_gb": round(adapter_ram_bytes / _GB, 2),
+        "vendor": vendor,
+    }
+
+# detect the gpu via wmic
+def _detect_gpu_via_wmic() -> list[dict[str, float | str]]:
+    if platform.system() != "Windows":
+        return []
+
+    result = _run_subprocess(["wmic", "path", "win32_VideoController", "get", "Name,AdapterRAM", "/format:csv"], timeout=10)
+    if result is None or result.returncode != 0 or not result.stdout.strip():
+        return []
+
+    gpus: list[dict[str, float | str]] = []
+    for line in result.stdout.strip().splitlines():
+        parts = [part.strip() for part in line.split(",") if part.strip()]
+        if len(parts) < 3:
+            continue
+        if parts[0].lower() == "node" or parts[1].lower() == "adapterram":
+            continue
+
+        adapter_ram_text = parts[1]
+        name = parts[2] if len(parts) > 2 else parts[-1]
+        if not name or _should_skip_win32_gpu(name):
+            continue
+
+        try:
+            adapter_ram_bytes = int(adapter_ram_text)
+        except ValueError:
+            adapter_ram_bytes = 0
+
+        gpus.append(_build_wmic_gpu_entry(name, adapter_ram_bytes))
+
+    return gpus
+
 def _detect_gpu() -> list[dict[str, float | str]]:
     gpus = _detect_nvidia_gpus()
     if gpus:
@@ -293,18 +343,24 @@ def _detect_gpu() -> list[dict[str, float | str]]:
     gpus = _detect_gpu_via_rocm_smi()
     if gpus:
         return gpus
+    if platform.system() == "Windows":
+        gpus = _detect_gpu_via_wmic()
+        if gpus:
+            return gpus
     if platform.system() == "Darwin":
         gpus = _detect_gpu_via_system_profiler()
         if gpus:
             return gpus
     return [_GPU_NOT_DETECTED.copy()]
 
+# entry point for the hardware detection to return a fixed shape dictionary consumed by all downstream components
+# kind of like a factory function
 def detect_hardware() -> dict[str, object]:
     return {
         "cpu": _detect_cpu(),
         "ram": _detect_ram(),
         "gpu": _detect_gpu(),
-        "os": {"name": "", "version": "", "arch": ""},
+        "os": _detect_os(),
     }
 
 if __name__ == "__main__":

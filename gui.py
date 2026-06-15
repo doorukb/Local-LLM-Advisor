@@ -2,6 +2,7 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 from collections.abc import Callable
+from tkinter import font as tkfont
 import customtkinter as ctk
 from advisor import STATUS_FETCHING, STATUS_GENERATING
 
@@ -30,6 +31,15 @@ REPORT_PLACEHOLDER = (
 )
 
 REPORT_FONT: tuple[str, int] = ("Courier New", 13)
+
+_CANDIDATE_MONO_FONTS = (
+    "Courier New",
+    "Consolas",
+    "Menlo",
+    "DejaVu Sans Mono",
+    "Liberation Mono",
+    "Courier",
+)
 
 WINDOW_SIZE = (820, 720)
 WINDOW_MIN_SIZE = (700, 620)
@@ -76,13 +86,19 @@ def _add_radio_group(parent: ctk.CTkFrame, row: int, label_text: str, options: t
     for col, option in enumerate(options):
         ctk.CTkRadioButton(group_frame, text=option, variable=variable, value=option, font=label_font).grid(row=0, column=col, sticky="w", padx=(0, 20))
 
-def _create_report_textbox(parent: ctk.CTkFrame, height: int = REPORT_TEXTBOX_HEIGHT) -> ctk.CTkTextbox:
-    report_text = ctk.CTkTextbox(parent, font=REPORT_FONT, height=height, wrap="word", activate_scrollbars=True)
+def _resolve_report_font(root: tk.Misc, size: int = 13) -> tuple[str, int]:
+    families = set(tkfont.families(root))
+    for family in _CANDIDATE_MONO_FONTS:
+        if family in families:
+            return (family, size)
+    return ("TkFixedFont", size)
+
+def _create_report_textbox(parent: ctk.CTkFrame, font: tuple[str, int], height: int = REPORT_TEXTBOX_HEIGHT) -> ctk.CTkTextbox:
+    report_text = ctk.CTkTextbox(parent, font=font, height=height, wrap="word", activate_scrollbars=True)
     report_text.insert("1.0", REPORT_PLACEHOLDER)
     report_text.configure(state="disabled")
     return report_text
 
-# Phase 7 calls this to populate the report
 def _set_report_content(report_text: ctk.CTkTextbox, content: str, save_button: ctk.CTkButton | None = None) -> None:
     report_text.configure(state="normal")
     report_text.delete("1.0", "end")
@@ -187,7 +203,7 @@ def run_gui(analyze_callback: AnalyzeCallback | None = None) -> None:
     progress_bar.grid_remove()
 
     # add the report textbox
-    report_text = _create_report_textbox(report_frame)
+    report_text = _create_report_textbox(report_frame, _resolve_report_font(window))
     report_text.grid(row=2, column=0, sticky="nsew")
     # add the save button
     save_button = ctk.CTkButton(

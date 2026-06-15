@@ -12,7 +12,8 @@ GEMINI_MODEL = "gemini-1.5-flash"
 GEMINI_TEMPERATURE = 0.2
 GEMINI_REQUEST_TIMEOUT = 120
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
-DEFAULT_CONFIG_PATH = Path("config.json")
+_PROJECT_DIR = Path(__file__).resolve().parent
+DEFAULT_CONFIG_PATH = _PROJECT_DIR / "config.json"
 
 ERROR_INVALID_API_KEY = (
     "Gemini API error: Invalid API key. "
