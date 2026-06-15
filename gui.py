@@ -21,6 +21,12 @@ PERFORMANCE_PRIORITY_OPTIONS = (
     "Balanced",
 )
 
+REPORT_PLACEHOLDER = (
+    "Your hardware and model recommendations will appear here after you click Analyze."
+)
+
+REPORT_FONT: tuple[str, int] = ("Courier New", 13)
+
 # get the selections from the dropdown menus and radio buttons
 def get_selections(
     engine_combo: ctk.CTkComboBox, # the inference engine dropdown menu
@@ -53,6 +59,24 @@ def _add_radio_group(parent: ctk.CTkFrame, row: int, label_text: str, options: t
     group_frame.grid(row=row, column=1, sticky="ew", pady=8)
     for col, option in enumerate(options):
         ctk.CTkRadioButton(group_frame, text=option, variable=variable, value=option).grid(row=0, column=col, sticky="w", padx=(0, 16))
+
+def _create_report_textbox(parent: ctk.CTkFrame) -> ctk.CTkTextbox:
+    report_text = ctk.CTkTextbox(
+        parent,
+        font=REPORT_FONT,
+        wrap="word",
+        activate_scrollbars=True,  # vertical scrollbar when content overflows
+    )
+    report_text.insert("1.0", REPORT_PLACEHOLDER)
+    report_text.configure(state="disabled")
+    return report_text
+
+# Phase 7 calls this to populate the report
+def _set_report_content(report_text: ctk.CTkTextbox, content: str) -> None:
+    report_text.configure(state="normal")
+    report_text.delete("1.0", "end")
+    report_text.insert("1.0", content)
+    report_text.configure(state="disabled")
 
 # open the main window and block until the user closes it; Analyze button and report area
 def run_gui() -> None:
@@ -117,8 +141,7 @@ def run_gui() -> None:
 
     ctk.CTkLabel(report_frame, text="Report").grid(row=0, column=0, sticky="w", pady=(0, 8))
 
-
-    report_text = ctk.CTkTextbox(report_frame, state="disabled", wrap="word")
+    report_text = _create_report_textbox(report_frame)
     report_text.grid(row=1, column=0, sticky="nsew")
 
     window.mainloop()
