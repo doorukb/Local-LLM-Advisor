@@ -96,7 +96,7 @@ try {
 
     $ScriptDir = Resolve-ScriptDir
     $RequirementsFile = Join-Path $ScriptDir 'requirements.txt'
-    $AdvisorFile = Join-Path $ScriptDir 'advisor.py'
+    $AdvisorFile = Join-Path $ScriptDir 'src\advisor.py'
 
     if (-not (Test-Path -LiteralPath $RequirementsFile)) {
         Die "Missing requirements file: $RequirementsFile"
@@ -127,7 +127,7 @@ try {
         Die "Failed to install dependencies from $RequirementsFile"
     }
 
-    # LLM_ADVISOR_VENV_DIR is read by advisor.py --reset to remove this bootstrap venv
+    # LLM_ADVISOR_VENV_DIR is read by src/advisor.py --reset to remove this bootstrap venv
     $env:LLM_ADVISOR_VENV_DIR = $VenvDir
 
     if ([string]::IsNullOrEmpty($PSScriptRoot)) {

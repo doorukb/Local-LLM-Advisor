@@ -5,8 +5,8 @@ from collections.abc import Callable
 from tkinter import filedialog, messagebox
 from tkinter import font as tkfont
 import customtkinter as ctk
-from constants import STATUS_FETCHING, STATUS_GENERATING
-from config import GeminiApiKeyNotFoundError, has_api_key, save_api_key
+from src.constants import STATUS_FETCHING, STATUS_GENERATING
+from src.config import GeminiApiKeyNotFoundError, has_api_key, save_api_key
 
 AnalyzeCallback = Callable[[dict[str, str], Callable[[str], None] | None], str]
 INFERENCE_ENGINES = ("Ollama", "llama.cpp", "LM Studio")

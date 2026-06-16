@@ -8,7 +8,7 @@ from pathlib import Path
 GEMINI_API_KEY_ENV = "GEMINI_API_KEY"
 LLM_ADVISOR_VENV_DIR_ENV = "LLM_ADVISOR_VENV_DIR"
 LLM_ADVISOR_CONFIG_PATH_ENV = "LLM_ADVISOR_CONFIG_PATH"
-_PROJECT_DIR = Path(__file__).resolve().parent
+_PROJECT_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = _PROJECT_DIR / "config.json"
 
 # raised when no gemini api key is available from env or config.json
