@@ -223,3 +223,5 @@ __pycache__/
 *.pyc
 .DS_Store
 Thumbs.db
+gui/__pycache__/
+src/__pycache__/

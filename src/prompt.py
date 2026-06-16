@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import TypedDict
-from fetch import FetchResult, ModelEntry
+from src.fetch import FetchResult, ModelEntry
 
 OLLAMA_UNAVAILABLE_NOTE = (
     "Live Ollama library data could not be fetched (network error or timeout). "
@@ -485,7 +485,7 @@ def build_prompt(hardware: HardwareSnapshot, selections: UserSelections, fetch_r
 if __name__ == "__main__":
     import os
 
-    from hardware import detect_hardware
+    from src.hardware import detect_hardware
 
     hardware = detect_hardware()
     selections: UserSelections = {
@@ -496,8 +496,8 @@ if __name__ == "__main__":
     }
 
     if os.environ.get("LIVE_GEMINI") == "1":
-        from fetch import fetch_all
-        from gemini import generate_report
+        from src.fetch import fetch_all
+        from src.gemini import generate_report
 
         system, user = build_prompt(hardware, selections, fetch_all())
         print(generate_report(system, user))
@@ -554,7 +554,7 @@ if __name__ == "__main__":
     assert "disclaimer" in system_prompt.lower()
     print(system_prompt)
 
-    from fetch import fetch_all
+    from src.fetch import fetch_all
 
     fetch_result = fetch_all()
     system, user = build_prompt(hardware, selections, fetch_result)

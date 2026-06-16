@@ -4,7 +4,7 @@ import google.generativeai as genai
 import requests
 from google.api_core import exceptions as google_api_exceptions
 from google.generativeai.types import generation_types
-from config import load_api_key
+from src.config import load_api_key
 
 GEMINI_MODEL = "gemini-3.1-flash-lite"
 GEMINI_TEMPERATURE = 0.2

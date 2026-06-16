@@ -70,7 +70,7 @@ find_python() {
 resolve_script_dir
 
 REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
-ADVISOR_FILE="$SCRIPT_DIR/advisor.py"
+ADVISOR_FILE="$SCRIPT_DIR/src/advisor.py"
 
 [[ -f "$REQUIREMENTS_FILE" ]] || die "Missing requirements file: $REQUIREMENTS_FILE"
 [[ -f "$ADVISOR_FILE" ]] || die "Missing advisor entrypoint: $ADVISOR_FILE"
@@ -87,7 +87,7 @@ if ! "$VENV_PYTHON" -m pip install -r "$REQUIREMENTS_FILE"; then
   die "Failed to install dependencies from $REQUIREMENTS_FILE"
 fi
 
-# LLM_ADVISOR_VENV_DIR is read by advisor.py --reset to remove this bootstrap venv
+# LLM_ADVISOR_VENV_DIR is read by src/advisor.py --reset to remove this bootstrap venv
 export LLM_ADVISOR_VENV_DIR="$VENV_DIR"
 
 if [[ -n "$BOOTSTRAP_REMOTE" ]]; then

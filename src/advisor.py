@@ -1,12 +1,18 @@
 from __future__ import annotations
 import sys
 from collections.abc import Callable
-from constants import STATUS_FETCHING, STATUS_GENERATING
-from fetch import fetch_all
-from config import reset_config, schedule_bootstrap_venv_removal
-from gemini import generate_report
-from hardware import detect_hardware
-from prompt import HardwareSnapshot, UserSelections, build_prompt
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from src.constants import STATUS_FETCHING, STATUS_GENERATING
+from src.fetch import fetch_all
+from src.config import reset_config, schedule_bootstrap_venv_removal
+from src.gemini import generate_report
+from src.hardware import detect_hardware
+from src.prompt import HardwareSnapshot, UserSelections, build_prompt
 
 def run_pipeline(hardware: HardwareSnapshot, selections: UserSelections, on_status: Callable[[str], None] | None = None) -> str:
     if on_status is not None:
